@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Chat</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lucide-icons@0.344.0/font/lucide.min.css">
+</head>
+<body>
+    <div class="container">
+        <div id="join-section" class="section">
+            <h1>Secure Chat</h1>
+            <div class="join-options">
+                <button id="create-room" class="secondary">
+                    <i data-lucide="shield" class="icon"></i>
+                    Create Secure Room
+                </button>
+                <div class="join-room">
+                    <input type="text" id="room-id" placeholder="Enter room ID" spellcheck="false" autocomplete="off">
+                    <button id="join-room">
+                        <i data-lucide="key" class="icon"></i>
+                        Join
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="chat-section" class="section hidden">
+            <div class="room-header">
+                <button id="toggle-audio" class="secondary" disabled>
+                    <i data-lucide="phone-off" class="icon"></i>
+                </button>
+                <button id="share-screen" class="secondary" disabled>
+                    <i data-lucide="monitor" class="icon"></i>
+                </button>
+                <div class="file-upload">
+                    <button id="upload-file" class="secondary" disabled>
+                        <i data-lucide="file-lock" class="icon"></i>
+                    </button>
+                    <input type="file" id="file-input" disabled>
+                    <div class="file-progress" style="width: 0%"></div>
+                </div>
+                <button id="leave-room" class="destructive">
+                    <i data-lucide="shield-off" class="icon"></i>
+                </button>
+            </div>
+            <div class="room-info">
+                <div class="room-id-container">
+                    <span class="room-id" id="current-room-id" title="Click to copy room ID"></span>
+                    <div class="connection-status">
+                        <span class="status-indicator connecting"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="chat-container">
+                <div class="chat-messages" id="messages"></div>
+                <form id="message-form" class="chat-input">
+                    <input type="text" id="message-input" placeholder="Write a message..." spellcheck="false" autocomplete="off" disabled>
+                    <button type="submit" disabled>
+                        <i data-lucide="send-horizontal" class="icon"></i>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="app.js"></script>
+</body>
+</html> 
