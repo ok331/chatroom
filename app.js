@@ -13,6 +13,7 @@ class PrivateChatroom {
         this.encryptionKey = null;
         this.displayName = null;
         this.participants = new Map(); // Store participants with their display names
+        this.messages = []; // Add temporary message storage
 
         // Create notification container first
         this.notificationContainer = document.createElement('div');
@@ -30,6 +31,11 @@ class PrivateChatroom {
         this.joinSection = document.getElementById('join-section');
         this.chatSection = document.getElementById('chat-section');
 
+        if (!this.joinSection || !this.chatSection) {
+            console.error('Required sections not found');
+            return false;
+        }
+
         // Buttons
         this.createRoomBtn = document.getElementById('create-room');
         this.joinRoomBtn = document.getElementById('join-room');
@@ -44,7 +50,7 @@ class PrivateChatroom {
         // Forms and inputs
         this.messageForm = document.getElementById('message-form');
         this.messageInput = document.getElementById('message-input');
-        this.sendMessageBtn = this.messageForm.querySelector('button');
+        this.sendMessageBtn = this.messageForm?.querySelector('button');
         this.roomIdInput = document.getElementById('room-id');
         this.displayNameInput = document.getElementById('display-name');
         
@@ -57,43 +63,77 @@ class PrivateChatroom {
         // Add participants list
         this.participantsList = document.getElementById('participants-list');
 
-        // Initialize message form state
-        this.messageInput.disabled = true;
-        this.sendMessageBtn.disabled = true;
+        // Initialize message form state if elements exist
+        if (this.messageInput && this.sendMessageBtn) {
+            this.messageInput.disabled = true;
+            this.sendMessageBtn.disabled = true;
+        }
+
+        // Add drag message element
+        const dragMessage = document.createElement('div');
+        dragMessage.className = 'drag-message';
+        dragMessage.textContent = 'Drop files to upload';
+        this.messageForm.appendChild(dragMessage);
+
+        return true;
     }
 
     addEventListeners() {
-        this.createRoomBtn.addEventListener('click', () => this.validateAndCreateRoom());
-        this.joinRoomBtn.addEventListener('click', () => this.validateAndJoinRoom());
-        this.generateKeyBtn.addEventListener('click', () => this.generateAndSetRoomId());
-        this.leaveRoomBtn.addEventListener('click', () => {
+        // Only add event listeners if elements exist
+        if (!this.initializeElements()) {
+            console.error('Failed to initialize elements. Event listeners not added.');
+            return;
+        }
+
+        this.createRoomBtn?.addEventListener('click', () => this.validateAndCreateRoom());
+        this.joinRoomBtn?.addEventListener('click', () => this.validateAndJoinRoom());
+        this.generateKeyBtn?.addEventListener('click', () => this.generateAndSetRoomId());
+        this.leaveRoomBtn?.addEventListener('click', () => {
             this.leaveRoom();
             return false;
         });
-        this.toggleAudioBtn.addEventListener('click', () => this.toggleCall());
-        this.shareScreenBtn.addEventListener('click', () => this.toggleScreenShare());
+        this.toggleAudioBtn?.addEventListener('click', () => this.toggleCall());
+        this.shareScreenBtn?.addEventListener('click', () => this.toggleScreenShare());
         
-        this.messageForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            if (this.messageInput.value.trim()) {
-                this.sendMessage();
-            }
-        });
-
-        this.sendMessageBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            if (this.messageInput.value.trim()) {
-                this.sendMessage();
-            }
-        });
-
-        this.uploadFileBtn.addEventListener('click', () => this.fileInput.click());
-        this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
-
-        this.currentRoomId.addEventListener('click', () => {
+        // Single event listener for room ID copying
+        this.currentRoomId?.addEventListener('click', () => {
             navigator.clipboard.writeText(this.currentRoomId.textContent)
-                .catch(err => console.error('Failed to copy room ID:', err));
+                .then(() => {
+                    this.showNotification({
+                        title: 'Room ID Copied',
+                        message: 'Room ID has been copied to your clipboard.',
+                        type: 'success',
+                        duration: 2000
+                    });
+                })
+                .catch(err => {
+                    console.error('Failed to copy room ID:', err);
+                    this.showNotification({
+                        title: 'Copy Failed',
+                        message: 'Failed to copy room ID to clipboard.',
+                        type: 'error'
+                    });
+                });
         });
+        
+        // Single event listener for message form
+        this.messageForm?.addEventListener('submit', (e) => {
+            e.preventDefault();
+            if (this.messageInput.value.trim()) {
+                this.sendMessage();
+            }
+        });
+
+        // Single event listener for send button
+        this.sendMessageBtn?.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (this.messageInput.value.trim()) {
+                this.sendMessage();
+            }
+        });
+
+        this.uploadFileBtn?.addEventListener('click', () => this.fileInput.click());
+        this.fileInput?.addEventListener('change', (e) => this.handleFileSelect(e));
 
         window.addEventListener('beforeunload', () => {
             if (this.isRoomOwner) {
@@ -113,16 +153,60 @@ class PrivateChatroom {
         });
 
         // Auto-focus message input when chat is shown
-        const observer = new MutationObserver((mutations) => {
-            mutations.forEach((mutation) => {
-                if (mutation.target.classList.contains('hidden')) {
-                    this.messageInput.blur();
-                } else {
-                    this.messageInput.focus();
-                }
+        if (this.chatSection && this.messageInput) {
+            const observer = new MutationObserver((mutations) => {
+                mutations.forEach((mutation) => {
+                    if (mutation.target.classList.contains('hidden')) {
+                        this.messageInput.blur();
+                    } else {
+                        this.messageInput.focus();
+                    }
+                });
             });
-        });
-        observer.observe(this.chatSection, { attributes: true });
+            observer.observe(this.chatSection, { attributes: true });
+        }
+
+        // Add drag and drop event listeners
+        if (this.messageInput) {
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                this.messageForm.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                });
+                document.body.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                });
+            });
+
+            ['dragenter', 'dragover'].forEach(eventName => {
+                this.messageForm.addEventListener(eventName, () => {
+                    this.messageForm.classList.add('drag-over');
+                });
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                this.messageForm.addEventListener(eventName, () => {
+                    this.messageForm.classList.remove('drag-over');
+                });
+            });
+
+            this.messageForm.addEventListener('drop', (e) => {
+                const files = Array.from(e.dataTransfer.files);
+                files.forEach(file => this.handleFileUpload(file));
+            });
+
+            // Also handle paste events for images
+            this.messageInput.addEventListener('paste', (e) => {
+                const items = Array.from(e.clipboardData.items);
+                items.forEach(item => {
+                    if (item.type.indexOf('image') === 0) {
+                        const file = item.getAsFile();
+                        this.handleFileUpload(file);
+                    }
+                });
+            });
+        }
     }
 
     checkUrlForRoomId() {
@@ -393,7 +477,7 @@ class PrivateChatroom {
                     key: this.encryptionKey,
                     creatorName: this.displayName
                 }));
-                // Send your display name
+                // Send your display name and peer ID
                 conn.send(JSON.stringify({
                     type: 'participant-joined',
                     displayName: this.displayName,
@@ -414,14 +498,33 @@ class PrivateChatroom {
         conn.on('data', async (data) => {
             if (typeof data === 'string') {
                 try {
-                    const parsed = JSON.parse(data);
-                    switch (parsed.type) {
+                    const message = JSON.parse(data);
+                    
+                    switch (message.type) {
+                        case 'chat':
+                            this.displayMessage(message.content, false, message.sender);
+                            break;
+                            
+                        case 'message':
+                            // Handle encrypted messages
+                            this.decryptMessage(message.message)
+                                .then(decryptedMsg => {
+                                    this.displayMessage(decryptedMsg, false, message.displayName);
+                                    // Store message in memory
+                                    this.messages.push({
+                                        text: decryptedMsg,
+                                        sender: message.displayName,
+                                        timestamp: message.timestamp,
+                                        isSent: false
+                                    });
+                                })
+                                .catch(err => console.error('Failed to decrypt message:', err));
+                            break;
+                            
                         case 'encryption-key':
-                            this.encryptionKey = parsed.key;
-                            if (parsed.creatorName) {
-                                this.displaySystemMessage(`Room created by ${parsed.creatorName}`);
-                            }
-                            // After getting the key, send your display name
+                            this.encryptionKey = message.key;
+                            this.displaySystemMessage(`Connected to room created by ${message.creatorName}`);
+                            // Send your display name after receiving the encryption key
                             conn.send(JSON.stringify({
                                 type: 'participant-joined',
                                 displayName: this.displayName,
@@ -429,38 +532,41 @@ class PrivateChatroom {
                                 isRoomOwner: false
                             }));
                             break;
-                        case 'participant-joined':
-                            this.participants.set(parsed.peerId, parsed.displayName);
-                            this.updateParticipantsList();
-                            this.displaySystemMessage(`${parsed.displayName} joined the room`);
-                            break;
-                        case 'message':
-                            const decryptedMsg = await this.decryptMessage(parsed.message);
-                            this.displayMessage(decryptedMsg, false);
-                            break;
-                        case 'owner-left':
-                            alert('Room owner has left. Disconnecting...');
-                            this.leaveRoom();
-                            break;
-                        case 'file-chunk':
-                            if (!fileChunks[parsed.name]) {
-                                fileChunks[parsed.name] = new Array(parsed.total);
-                            }
-                            fileChunks[parsed.name][parsed.index] = parsed.chunk;
                             
-                            if (!fileChunks[parsed.name].includes(undefined)) {
-                                const fileData = fileChunks[parsed.name].join('');
-                                this.displayMessage(`Received file: ${parsed.name}`, false);
-                                
-                                // Create download link
-                                const link = document.createElement('a');
-                                link.href = fileData;
-                                link.download = parsed.name;
-                                link.click();
-                                
-                                delete fileChunks[parsed.name];
+                        case 'participant-joined':
+                            if (!this.participants.has(conn.peer)) {
+                                this.participants.set(conn.peer, message.displayName);
+                                this.displaySystemMessage(`${message.displayName} joined the room`);
+                                this.updateParticipantsList();
                             }
                             break;
+                            
+                        case 'file-chunk':
+                            if (!fileChunks[message.name]) {
+                                fileChunks[message.name] = new Array(message.total);
+                            }
+                            fileChunks[message.name][message.index] = message.chunk;
+                            
+                            if (!fileChunks[message.name].includes(undefined)) {
+                                const fileData = fileChunks[message.name].join('');
+                                
+                                if (message.fileType === 'image') {
+                                    this.displayMessage(`<img src="${fileData}" alt="${message.name}" style="max-width: 300px; max-height: 300px; border-radius: 4px;">`, false);
+                                } else {
+                                    this.displayMessage(`Received file: ${message.name}`, false);
+                                    // Create download link
+                                    const link = document.createElement('a');
+                                    link.href = fileData;
+                                    link.download = message.name;
+                                    link.click();
+                                }
+                                
+                                delete fileChunks[message.name];
+                            }
+                            break;
+                            
+                        default:
+                            console.warn('Unknown message type:', message.type);
                     }
                 } catch (err) {
                     console.error('Error processing message:', err);
@@ -809,46 +915,74 @@ class PrivateChatroom {
         if (!message) return;
 
         try {
-            const encryptedMsg = await this.encryptMessage(message);
-            this.connection.send(JSON.stringify({
-                type: 'message',
-                message: encryptedMsg,
-                displayName: this.displayName
-            }));
+            // Display message first
             this.displayMessage(message, true);
+            
+            // Clear input and focus
             this.messageInput.value = '';
+            this.messageInput.focus();
+
+            // Store message in memory
+            const messageData = {
+                text: message,
+                sender: this.displayName,
+                timestamp: Date.now(),
+                isSent: true
+            };
+            this.messages.push(messageData);
+
+            // Try to send if connected
+            if (this.connection && this.connection.open) {
+                const encryptedMsg = await this.encryptMessage(message);
+                await this.connection.send(JSON.stringify({
+                    type: 'message',
+                    message: encryptedMsg,
+                    displayName: this.displayName,
+                    timestamp: messageData.timestamp
+                }));
+            }
         } catch (err) {
             console.error('Failed to send message:', err);
+            this.showNotification({
+                title: 'Message Failed',
+                message: 'Failed to send message. Please try again.',
+                type: 'error'
+            });
         }
     }
 
-    displayMessage(message, isSent) {
+    displayMessage(message, isSent, senderName = null) {
         const messageElement = document.createElement('div');
-        messageElement.className = `message ${isSent ? 'sent' : 'received'}`;
-        messageElement.textContent = message;
+        const lastMessage = this.messagesContainer.lastElementChild;
         
-        // Add display name as data attribute
-        const displayName = isSent ? this.displayName : this.connection.metadata.displayName;
-        messageElement.setAttribute('data-sender', displayName);
+        // Check if we should show the sender name
+        let showSender = true;
+        if (lastMessage && lastMessage.classList.contains('message')) {
+            const lastIsSent = lastMessage.classList.contains('sent');
+            // Hide sender if the last message was from the same person
+            if (lastIsSent === isSent) {
+                showSender = false;
+            }
+        }
+
+        messageElement.className = `message ${isSent ? 'sent' : 'received'} ${showSender ? 'with-sender' : 'without-sender'}`;
+        
+        // Check if message contains HTML (for images)
+        if (message.startsWith('<img')) {
+            messageElement.innerHTML = message;
+        } else {
+            messageElement.textContent = message;
+        }
+        
+        // Add display name as data attribute only if showing sender
+        if (showSender) {
+            const displayName = isSent ? this.displayName : 
+                (senderName || (this.connection?.metadata?.displayName || 'Unknown'));
+            messageElement.setAttribute('data-sender', displayName);
+        }
         
         this.messagesContainer.appendChild(messageElement);
         this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
-
-        // Remove message after 5 minutes for privacy
-        setTimeout(() => {
-            messageElement.style.opacity = '0';
-            setTimeout(() => {
-                if (messageElement.parentNode === this.messagesContainer) {
-                    this.messagesContainer.removeChild(messageElement);
-                }
-            }, 200);
-        }, 5 * 60 * 1000);
-
-        // Clear input right away for better UX
-        if (isSent) {
-            this.messageInput.value = '';
-            this.messageInput.focus();
-        }
     }
 
     showChatSection() {
@@ -892,52 +1026,57 @@ class PrivateChatroom {
         };
 
         confirmBtn.onclick = () => {
-            notification.remove();
+            try {
+                notification.remove();
 
-            // End any active calls first
-            if (this.isInCall) {
-                this.endCall();
-            }
-
-            // Try to notify other participants if connected
-            if (this.connection && this.isRoomOwner) {
-                try {
-                    this.connection.send(JSON.stringify({ type: 'owner-left' }));
-                } catch (e) {
-                    // Ignore connection errors during cleanup
+                // End any active calls first
+                if (this.isInCall) {
+                    this.endCall();
                 }
+
+                // Try to notify other participants if connected
+                if (this.connection && this.connection.open && this.isRoomOwner) {
+                    this.connection.send(JSON.stringify({ type: 'owner-left' }));
+                }
+
+                // Clear all data
+                this.participants.clear();
+                this.messages = [];
+                this.cleanupConnections();
+
+                // Reset URL and state
+                window.history.pushState({}, '', '/');
+                this.isRoomOwner = false;
+                this.hasPartner = false;
+                this.encryptionKey = null;
+
+                // Reset UI
+                this.chatSection.classList.add('hidden');
+                this.joinSection.classList.remove('hidden');
+                this.joinSection.style.display = 'flex';
+                this.messagesContainer.innerHTML = '';
+                this.messageInput.value = '';
+                this.roomIdInput.value = '';
+                this.displayNameInput.value = '';
+                this.updateConnectionStatus('disconnected');
+
+                // Show success notification
+                this.showNotification({
+                    title: 'Room Deleted',
+                    message: 'The room has been permanently deleted.',
+                    type: 'success'
+                });
+
+                // Force reload to ensure clean state
+                window.location.href = '/';
+            } catch (error) {
+                console.error('Error during room deletion:', error);
+                this.showNotification({
+                    title: 'Error',
+                    message: 'Failed to delete room. Please try again.',
+                    type: 'error'
+                });
             }
-
-            // Clear all data
-            this.participants.clear();
-            this.cleanupConnections();
-
-            // Reset URL and state
-            window.history.pushState({}, '', '/');
-            this.isRoomOwner = false;
-            this.hasPartner = false;
-            this.encryptionKey = null;
-
-            // Reset UI
-            this.chatSection.classList.add('hidden');
-            this.joinSection.classList.remove('hidden');
-            this.joinSection.style.display = 'flex';
-            this.messagesContainer.innerHTML = '';
-            this.messageInput.value = '';
-            this.roomIdInput.value = '';
-            this.displayNameInput.value = '';
-            this.updateConnectionStatus('disconnected');
-
-            // Show success notification
-            this.showNotification({
-                title: 'Room Deleted',
-                message: 'The room has been permanently deleted.',
-                type: 'success'
-            });
-
-            // Reinitialize elements and icons
-            this.initializeElements();
-            lucide.createIcons();
         };
     }
 
@@ -971,15 +1110,28 @@ class PrivateChatroom {
         participantsList.innerHTML = '';
         
         // Add yourself first
-        const selfParticipant = document.createElement('div');
-        selfParticipant.className = 'participant';
-        selfParticipant.innerHTML = `
+        const yourParticipant = document.createElement('div');
+        yourParticipant.className = 'participant';
+        yourParticipant.innerHTML = `
             <span class="status"></span>
             <span>${this.displayName} (You)</span>
         `;
-        participantsList.appendChild(selfParticipant);
+        participantsList.appendChild(yourParticipant);
+        
+        // Add other participants (only those who aren't you)
+        this.participants.forEach((name, peerId) => {
+            if (peerId !== this.peer.id) {  // Only add if it's not your peer ID
+                const participantElement = document.createElement('div');
+                participantElement.className = 'participant';
+                participantElement.innerHTML = `
+                    <span class="status"></span>
+                    <span>${name}</span>
+                `;
+                participantsList.appendChild(participantElement);
+            }
+        });
 
-        // Add toggle button if it doesn't exist
+        // Handle toggle button for long lists
         let toggleButton = participantsContainer.querySelector('.toggle-participants');
         if (!toggleButton) {
             toggleButton = document.createElement('button');
@@ -992,17 +1144,6 @@ class PrivateChatroom {
                 toggleButton.innerHTML = isExpanded ? 'Hide' : 'Show All';
             });
         }
-
-        // Add other participants
-        this.participants.forEach(name => {
-            const participantElement = document.createElement('div');
-            participantElement.className = 'participant';
-            participantElement.innerHTML = `
-                <span class="status"></span>
-                <span>${name}</span>
-            `;
-            participantsList.appendChild(participantElement);
-        });
 
         // Check if we need the toggle button
         const participantsListRect = participantsList.getBoundingClientRect();
@@ -1027,14 +1168,16 @@ class PrivateChatroom {
         this.messagesContainer.appendChild(messageElement);
         this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
 
-        // Remove system message after 5 minutes
+        // Only remove system messages after 5 minutes
         setTimeout(() => {
-            messageElement.style.opacity = '0';
-            setTimeout(() => {
-                if (messageElement.parentNode === this.messagesContainer) {
-                    this.messagesContainer.removeChild(messageElement);
-                }
-            }, 200);
+            if (messageElement.classList.contains('system-message')) {
+                messageElement.style.opacity = '0';
+                setTimeout(() => {
+                    if (messageElement.parentNode === this.messagesContainer) {
+                        this.messagesContainer.removeChild(messageElement);
+                    }
+                }, 200);
+            }
         }, 5 * 60 * 1000);
     }
 
@@ -1082,6 +1225,78 @@ class PrivateChatroom {
             message: 'A new room ID has been generated. Click Join to connect.',
             type: 'info'
         });
+    }
+
+    async handleFileUpload(file) {
+        if (!file) return;
+
+        // Check if it's an image
+        const isImage = file.type.startsWith('image/');
+        
+        if (file.size > 15 * 1024 * 1024) {
+            this.showNotification({
+                title: 'File Too Large',
+                message: 'File size must be less than 15MB.',
+                type: 'error'
+            });
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const data = {
+                type: isImage ? 'image' : 'file',
+                name: file.name,
+                size: file.size,
+                data: e.target.result
+            };
+
+            try {
+                this.uploadFileBtn.disabled = true;
+                this.fileProgress.style.width = '0%';
+                
+                // Split file into chunks of 16KB
+                const chunkSize = 16 * 1024;
+                const chunks = Math.ceil(data.data.length / chunkSize);
+                
+                for (let i = 0; i < chunks; i++) {
+                    const chunk = data.data.slice(i * chunkSize, (i + 1) * chunkSize);
+                    await this.connection.send(JSON.stringify({
+                        type: 'file-chunk',
+                        fileType: data.type,
+                        name: file.name,
+                        chunk,
+                        index: i,
+                        total: chunks
+                    }));
+                    this.fileProgress.style.width = `${((i + 1) / chunks) * 100}%`;
+                }
+
+                // Display preview for sender
+                if (isImage) {
+                    this.displayMessage(`<img src="${data.data}" alt="${file.name}" style="max-width: 300px; max-height: 300px; border-radius: 4px;">`, true);
+                } else {
+                    this.displayMessage(`Sent file: ${file.name}`, true);
+                }
+
+                this.showNotification({
+                    title: isImage ? 'Image Sent' : 'File Sent',
+                    message: `Successfully sent: ${file.name}`,
+                    type: 'success'
+                });
+            } catch (err) {
+                console.error('Failed to send file:', err);
+                this.showNotification({
+                    title: 'Failed to Send File',
+                    message: 'An error occurred while sending the file.',
+                    type: 'error'
+                });
+            } finally {
+                this.uploadFileBtn.disabled = false;
+                this.fileProgress.style.width = '0%';
+            }
+        };
+        reader.readAsDataURL(file);
     }
 }
 
