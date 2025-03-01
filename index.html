@@ -3,22 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Secure Chat</title>
+    <title>privo.cx</title>
     <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lucide-icons@0.344.0/font/lucide.min.css">
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
 </head>
 <body>
     <div class="container">
         <div id="join-section" class="section">
-            <h1>Secure Chat</h1>
+            <h1>PRIVO.CX</h1>
             <div class="join-options">
+                <div class="display-name-input">
+                    <input type="text" id="display-name" placeholder="Display name" spellcheck="false" autocomplete="off" maxlength="20">
+                </div>
                 <button id="create-room" class="secondary">
                     <i data-lucide="shield" class="icon"></i>
-                    Create Secure Room
+                    Create Room
                 </button>
                 <div class="join-room">
-                    <input type="text" id="room-id" placeholder="Enter room ID" spellcheck="false" autocomplete="off">
-                    <button id="join-room">
+                    <input type="text" id="room-id" placeholder="Room ID" spellcheck="false" autocomplete="off">
+                    <button id="join-room" class="accent">
                         <i data-lucide="key" class="icon"></i>
                         Join
                     </button>
@@ -41,7 +44,7 @@
                     <input type="file" id="file-input" disabled>
                     <div class="file-progress" style="width: 0%"></div>
                 </div>
-                <button id="leave-room" class="destructive">
+                <button id="leave-room" class="destructive" title="Leave and permanently delete room">
                     <i data-lucide="shield-off" class="icon"></i>
                 </button>
             </div>
@@ -52,9 +55,17 @@
                         <span class="status-indicator connecting"></span>
                     </div>
                 </div>
+                <div class="participants-container">
+                    <h3>Participants</h3>
+                    <div id="participants-list"></div>
+                </div>
             </div>
             <div class="chat-container">
-                <div class="chat-messages" id="messages"></div>
+                <div class="chat-messages" id="messages">
+                    <div class="welcome-message">
+                        Welcome to the secure chat room!
+                    </div>
+                </div>
                 <form id="message-form" class="chat-input">
                     <input type="text" id="message-input" placeholder="Write a message..." spellcheck="false" autocomplete="off" disabled>
                     <button type="submit" disabled>
@@ -65,7 +76,9 @@
         </div>
     </div>
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        lucide.createIcons();
+    </script>
     <script src="app.js"></script>
 </body>
 </html> 
