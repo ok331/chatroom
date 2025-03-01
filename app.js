@@ -11,6 +11,13 @@ class PrivateChatroom {
         this.isRoomOwner = false;
         this.hasPartner = false;
         this.encryptionKey = null;
+        this.displayName = null;
+        this.participants = new Map(); // Store participants with their display names
+
+        // Create notification container first
+        this.notificationContainer = document.createElement('div');
+        this.notificationContainer.className = 'notification-container';
+        document.body.appendChild(this.notificationContainer);
 
         this.initializeElements();
         this.addEventListeners();
@@ -26,6 +33,7 @@ class PrivateChatroom {
         // Buttons
         this.createRoomBtn = document.getElementById('create-room');
         this.joinRoomBtn = document.getElementById('join-room');
+        this.generateKeyBtn = document.getElementById('generate-key');
         this.leaveRoomBtn = document.getElementById('leave-room');
         this.toggleAudioBtn = document.getElementById('toggle-audio');
         this.shareScreenBtn = document.getElementById('share-screen');
@@ -35,26 +43,48 @@ class PrivateChatroom {
 
         // Forms and inputs
         this.messageForm = document.getElementById('message-form');
-        this.roomIdInput = document.getElementById('room-id');
         this.messageInput = document.getElementById('message-input');
+        this.sendMessageBtn = this.messageForm.querySelector('button');
+        this.roomIdInput = document.getElementById('room-id');
+        this.displayNameInput = document.getElementById('display-name');
         
         // Display elements
         this.currentRoomId = document.getElementById('current-room-id');
         this.messagesContainer = document.getElementById('messages');
         this.connectionStatus = document.querySelector('.connection-status');
         this.statusIndicator = document.querySelector('.status-indicator');
+
+        // Add participants list
+        this.participantsList = document.getElementById('participants-list');
+
+        // Initialize message form state
+        this.messageInput.disabled = true;
+        this.sendMessageBtn.disabled = true;
     }
 
     addEventListeners() {
-        this.createRoomBtn.addEventListener('click', () => this.createRoom());
-        this.joinRoomBtn.addEventListener('click', () => this.joinRoom());
-        this.leaveRoomBtn.addEventListener('click', () => this.leaveRoom());
+        this.createRoomBtn.addEventListener('click', () => this.validateAndCreateRoom());
+        this.joinRoomBtn.addEventListener('click', () => this.validateAndJoinRoom());
+        this.generateKeyBtn.addEventListener('click', () => this.generateAndSetRoomId());
+        this.leaveRoomBtn.addEventListener('click', () => {
+            this.leaveRoom();
+            return false;
+        });
         this.toggleAudioBtn.addEventListener('click', () => this.toggleCall());
         this.shareScreenBtn.addEventListener('click', () => this.toggleScreenShare());
         
         this.messageForm.addEventListener('submit', (e) => {
             e.preventDefault();
-            this.sendMessage();
+            if (this.messageInput.value.trim()) {
+                this.sendMessage();
+            }
+        });
+
+        this.sendMessageBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (this.messageInput.value.trim()) {
+                this.sendMessage();
+            }
         });
 
         this.uploadFileBtn.addEventListener('click', () => this.fileInput.click());
@@ -78,7 +108,7 @@ class PrivateChatroom {
                 this.leaveRoom();
             } else if (roomId.length === 24) {
                 this.roomIdInput.value = roomId;
-                this.joinRoom();
+                this.validateAndJoinRoom();
             }
         });
 
@@ -175,7 +205,11 @@ class PrivateChatroom {
         if (!file) return;
 
         if (file.size > 15 * 1024 * 1024) {
-            alert('File size must be less than 15MB');
+            this.showNotification({
+                title: 'File Too Large',
+                message: 'File size must be less than 15MB.',
+                type: 'error'
+            });
             return;
         }
 
@@ -208,10 +242,18 @@ class PrivateChatroom {
                     this.fileProgress.style.width = `${((i + 1) / chunks) * 100}%`;
                 }
 
-                this.displayMessage(`Sent file: ${file.name}`, true);
+                this.showNotification({
+                    title: 'File Sent',
+                    message: `Successfully sent: ${file.name}`,
+                    type: 'success'
+                });
             } catch (err) {
                 console.error('Failed to send file:', err);
-                alert('Failed to send file');
+                this.showNotification({
+                    title: 'Failed to Send File',
+                    message: 'An error occurred while sending the file.',
+                    type: 'error'
+                });
             } finally {
                 this.uploadFileBtn.disabled = false;
                 this.fileProgress.style.width = '0%';
@@ -219,6 +261,42 @@ class PrivateChatroom {
             }
         };
         reader.readAsDataURL(file);
+    }
+
+    validateDisplayName() {
+        const displayName = this.displayNameInput.value.trim();
+        if (!displayName) {
+            this.showNotification({
+                title: 'Display Name Required',
+                message: 'Please enter your display name to continue.',
+                type: 'error'
+            });
+            this.displayNameInput.focus();
+            return false;
+        }
+        if (displayName.length > 20) {
+            this.showNotification({
+                title: 'Display Name Too Long',
+                message: 'Display name must be 20 characters or less.',
+                type: 'error'
+            });
+            this.displayNameInput.focus();
+            return false;
+        }
+        this.displayName = displayName;
+        return true;
+    }
+
+    validateAndCreateRoom() {
+        if (this.validateDisplayName()) {
+            this.createRoom();
+        }
+    }
+
+    validateAndJoinRoom() {
+        if (this.validateDisplayName()) {
+            this.joinRoom();
+        }
     }
 
     async createRoom() {
@@ -230,18 +308,27 @@ class PrivateChatroom {
         this.currentRoomId.textContent = roomId;
         this.showChatSection();
         this.updateConnectionStatus('connecting');
+        this.displaySystemMessage(`Room created by ${this.displayName}`);
     }
 
     async joinRoom() {
         if (this.hasPartner) {
-            alert('This room is already full');
+            this.showNotification({
+                title: 'Room Full',
+                message: 'This room is already full.',
+                type: 'error'
+            });
             return;
         }
 
         const roomId = this.roomIdInput.value.trim();
         
         if (roomId.length !== 24) {
-            alert('Please enter a valid 24-character room ID');
+            this.showNotification({
+                title: 'Invalid Room ID',
+                message: 'Please enter a valid 24-character room ID.',
+                type: 'error'
+            });
             return;
         }
 
@@ -290,17 +377,33 @@ class PrivateChatroom {
     }
 
     setupConnectionHandlers(conn) {
+        this.connection = conn;
+        
+        // Set connection metadata with display name and room owner status
+        this.connection.metadata = { 
+            displayName: this.displayName,
+            isRoomOwner: this.isRoomOwner
+        };
+        
         conn.on('open', () => {
             this.hasPartner = true;
             if (this.isRoomOwner) {
                 conn.send(JSON.stringify({
                     type: 'encryption-key',
-                    key: this.encryptionKey
+                    key: this.encryptionKey,
+                    creatorName: this.displayName
+                }));
+                // Send your display name
+                conn.send(JSON.stringify({
+                    type: 'participant-joined',
+                    displayName: this.displayName,
+                    peerId: this.peer.id,
+                    isRoomOwner: true
                 }));
             }
             this.updateConnectionStatus('connected');
             this.messageInput.disabled = false;
-            this.messageForm.querySelector('button').disabled = false;
+            this.sendMessageBtn.disabled = false;
             this.toggleAudioBtn.disabled = false;
             this.uploadFileBtn.disabled = false;
             this.fileInput.disabled = false;
@@ -312,37 +415,52 @@ class PrivateChatroom {
             if (typeof data === 'string') {
                 try {
                     const parsed = JSON.parse(data);
-                    if (parsed.type === 'encryption-key') {
-                        this.encryptionKey = parsed.key;
-                        return;
-                    }
-                    if (parsed.type === 'encrypted-message') {
-                        const decrypted = await this.decryptMessage(parsed);
-                        this.displayMessage(decrypted, false);
-                        return;
-                    }
-                    if (parsed.type === 'owner-left') {
-                        alert('Room owner has left. Disconnecting...');
-                        this.leaveRoom();
-                        return;
-                    } else if (parsed.type === 'file-chunk') {
-                        if (!fileChunks[parsed.name]) {
-                            fileChunks[parsed.name] = new Array(parsed.total);
-                        }
-                        fileChunks[parsed.name][parsed.index] = parsed.chunk;
-                        
-                        if (!fileChunks[parsed.name].includes(undefined)) {
-                            const fileData = fileChunks[parsed.name].join('');
-                            this.displayMessage(`Received file: ${parsed.name}`, false);
+                    switch (parsed.type) {
+                        case 'encryption-key':
+                            this.encryptionKey = parsed.key;
+                            if (parsed.creatorName) {
+                                this.displaySystemMessage(`Room created by ${parsed.creatorName}`);
+                            }
+                            // After getting the key, send your display name
+                            conn.send(JSON.stringify({
+                                type: 'participant-joined',
+                                displayName: this.displayName,
+                                peerId: this.peer.id,
+                                isRoomOwner: false
+                            }));
+                            break;
+                        case 'participant-joined':
+                            this.participants.set(parsed.peerId, parsed.displayName);
+                            this.updateParticipantsList();
+                            this.displaySystemMessage(`${parsed.displayName} joined the room`);
+                            break;
+                        case 'message':
+                            const decryptedMsg = await this.decryptMessage(parsed.message);
+                            this.displayMessage(decryptedMsg, false);
+                            break;
+                        case 'owner-left':
+                            alert('Room owner has left. Disconnecting...');
+                            this.leaveRoom();
+                            break;
+                        case 'file-chunk':
+                            if (!fileChunks[parsed.name]) {
+                                fileChunks[parsed.name] = new Array(parsed.total);
+                            }
+                            fileChunks[parsed.name][parsed.index] = parsed.chunk;
                             
-                            // Create download link
-                            const link = document.createElement('a');
-                            link.href = fileData;
-                            link.download = parsed.name;
-                            link.click();
-                            
-                            delete fileChunks[parsed.name];
-                        }
+                            if (!fileChunks[parsed.name].includes(undefined)) {
+                                const fileData = fileChunks[parsed.name].join('');
+                                this.displayMessage(`Received file: ${parsed.name}`, false);
+                                
+                                // Create download link
+                                const link = document.createElement('a');
+                                link.href = fileData;
+                                link.download = parsed.name;
+                                link.click();
+                                
+                                delete fileChunks[parsed.name];
+                            }
+                            break;
                     }
                 } catch (err) {
                     console.error('Error processing message:', err);
@@ -351,25 +469,62 @@ class PrivateChatroom {
         });
 
         conn.on('close', () => {
+            const partnerName = this.participants.get(conn.peer);
+            if (partnerName) {
+                this.displaySystemMessage(`${partnerName} left the room`);
+                this.participants.delete(conn.peer);
+                this.updateParticipantsList();
+            }
+
             this.hasPartner = false;
             this.updateConnectionStatus('disconnected');
             this.messageInput.disabled = true;
-            this.messageForm.querySelector('button').disabled = true;
+            this.sendMessageBtn.disabled = true;
             this.toggleAudioBtn.disabled = true;
             this.shareScreenBtn.disabled = true;
             this.uploadFileBtn.disabled = true;
             this.fileInput.disabled = true;
             
             if (!this.isRoomOwner) {
-                alert('Connection lost. Returning to join screen...');
+                this.showNotification({
+                    title: 'Connection Lost',
+                    message: 'Connection to the room was lost.',
+                    type: 'error'
+                });
                 this.leaveRoom();
             }
         });
     }
 
     async handleIncomingCall(call) {
-        const shouldAccept = confirm('Incoming call. Accept?');
-        if (shouldAccept) {
+        const notification = this.showNotification({
+            title: 'Incoming Call',
+            message: 'Would you like to accept the call?',
+            type: 'info',
+            duration: false
+        });
+
+        // Add accept/reject buttons
+        const actions = document.createElement('div');
+        actions.style.cssText = 'display: flex; gap: 0.5rem; margin-top: 0.5rem;';
+        
+        const acceptBtn = document.createElement('button');
+        acceptBtn.className = 'secondary';
+        acceptBtn.innerHTML = '<i data-lucide="phone" class="icon"></i>Accept';
+        acceptBtn.style.padding = '0.5rem';
+        
+        const rejectBtn = document.createElement('button');
+        rejectBtn.className = 'destructive';
+        rejectBtn.innerHTML = '<i data-lucide="phone-off" class="icon"></i>Reject';
+        rejectBtn.style.padding = '0.5rem';
+        
+        actions.appendChild(acceptBtn);
+        actions.appendChild(rejectBtn);
+        notification.querySelector('.notification-content').appendChild(actions);
+        lucide.createIcons();
+
+        acceptBtn.onclick = async () => {
+            notification.remove();
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 this.localStream = stream;
@@ -385,13 +540,31 @@ class PrivateChatroom {
                 this.isInCall = true;
                 this.updateCallButton();
                 this.shareScreenBtn.disabled = false;
+                
+                this.showNotification({
+                    title: 'Call Connected',
+                    message: 'You are now in a call.',
+                    type: 'success'
+                });
             } catch (err) {
                 console.error('Failed to get local stream', err);
-                alert('Failed to access microphone');
+                this.showNotification({
+                    title: 'Microphone Access Failed',
+                    message: 'Failed to access your microphone.',
+                    type: 'error'
+                });
             }
-        } else {
+        };
+
+        rejectBtn.onclick = () => {
+            notification.remove();
             call.close();
-        }
+            this.showNotification({
+                title: 'Call Rejected',
+                message: 'You rejected the call.',
+                type: 'info'
+            });
+        };
     }
 
     async handleIncomingScreenShare(call) {
@@ -473,7 +646,11 @@ class PrivateChatroom {
 
     async startCall() {
         if (!this.connection) {
-            alert('Must be connected to start a call');
+            this.showNotification({
+                title: 'Cannot Start Call',
+                message: 'You must be connected to start a call.',
+                type: 'error'
+            });
             return;
         }
 
@@ -492,9 +669,19 @@ class PrivateChatroom {
             this.isInCall = true;
             this.updateCallButton();
             this.shareScreenBtn.disabled = false;
+            
+            this.showNotification({
+                title: 'Call Started',
+                message: 'Call connection established.',
+                type: 'success'
+            });
         } catch (err) {
             console.error('Failed to start call', err);
-            alert('Failed to start call');
+            this.showNotification({
+                title: 'Call Failed',
+                message: 'Failed to start the call. Please check your microphone.',
+                type: 'error'
+            });
         }
     }
 
@@ -537,7 +724,11 @@ class PrivateChatroom {
 
     async startScreenShare() {
         if (!this.isInCall) {
-            alert('Must be in a call to share screen');
+            this.showNotification({
+                title: 'Cannot Share Screen',
+                message: 'You must be in a call to share your screen.',
+                type: 'error'
+            });
             return;
         }
 
@@ -569,9 +760,19 @@ class PrivateChatroom {
             this.screenCall = call;
             this.isScreenSharing = true;
             this.updateScreenShareButton();
+            
+            this.showNotification({
+                title: 'Screen Sharing Started',
+                message: 'You are now sharing your screen.',
+                type: 'success'
+            });
         } catch (err) {
             console.error('Failed to share screen', err);
-            alert('Failed to share screen');
+            this.showNotification({
+                title: 'Screen Share Failed',
+                message: 'Failed to start screen sharing.',
+                type: 'error'
+            });
         }
     }
 
@@ -605,27 +806,30 @@ class PrivateChatroom {
 
     async sendMessage() {
         const message = this.messageInput.value.trim();
-        if (!message || !this.connection || !this.encryptionKey) return;
+        if (!message) return;
 
         try {
-            const encrypted = await this.encryptMessage(message);
+            const encryptedMsg = await this.encryptMessage(message);
             this.connection.send(JSON.stringify({
-                type: 'encrypted-message',
-                ...encrypted
+                type: 'message',
+                message: encryptedMsg,
+                displayName: this.displayName
             }));
             this.displayMessage(message, true);
             this.messageInput.value = '';
-            this.messageInput.focus();
         } catch (err) {
-            console.error('Error sending encrypted message:', err);
+            console.error('Failed to send message:', err);
         }
     }
 
     displayMessage(message, isSent) {
         const messageElement = document.createElement('div');
-        messageElement.classList.add('message', isSent ? 'sent' : 'received');
-        messageElement.setAttribute('data-sender', isSent ? 'You' : 'Partner');
+        messageElement.className = `message ${isSent ? 'sent' : 'received'}`;
         messageElement.textContent = message;
+        
+        // Add display name as data attribute
+        const displayName = isSent ? this.displayName : this.connection.metadata.displayName;
+        messageElement.setAttribute('data-sender', displayName);
         
         this.messagesContainer.appendChild(messageElement);
         this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
@@ -650,21 +854,91 @@ class PrivateChatroom {
     showChatSection() {
         this.joinSection.classList.add('hidden');
         this.chatSection.classList.remove('hidden');
+        this.updateParticipantsList();
+        // Hide the join section completely
+        this.joinSection.style.display = 'none';
     }
 
     leaveRoom() {
-        if (this.isRoomOwner && this.connection) {
-            this.connection.send(JSON.stringify({ type: 'owner-left' }));
-        }
-        this.cleanupConnections();
-        window.history.pushState({}, '', '/');
-        this.chatSection.classList.add('hidden');
-        this.joinSection.classList.remove('hidden');
-        this.messagesContainer.innerHTML = '';
-        this.messageInput.value = '';
-        this.isRoomOwner = false;
-        this.hasPartner = false;
-        this.updateConnectionStatus('disconnected');
+        // Show confirmation dialog using our notification system
+        const notification = this.showNotification({
+            title: 'Delete Room',
+            message: 'Are you sure you want to permanently delete this room? This action cannot be undone.',
+            type: 'error',
+            duration: false
+        });
+
+        // Add confirm/cancel buttons
+        const actions = document.createElement('div');
+        actions.style.cssText = 'display: flex; gap: 0.5rem; margin-top: 0.5rem;';
+        
+        const confirmBtn = document.createElement('button');
+        confirmBtn.className = 'destructive';
+        confirmBtn.innerHTML = '<i data-lucide="shield-off" class="icon"></i>Delete Room';
+        confirmBtn.style.padding = '0.5rem';
+        
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'secondary';
+        cancelBtn.innerHTML = 'Cancel';
+        cancelBtn.style.padding = '0.5rem';
+        
+        actions.appendChild(confirmBtn);
+        actions.appendChild(cancelBtn);
+        notification.querySelector('.notification-content').appendChild(actions);
+        lucide.createIcons();
+
+        cancelBtn.onclick = () => {
+            notification.remove();
+        };
+
+        confirmBtn.onclick = () => {
+            notification.remove();
+
+            // End any active calls first
+            if (this.isInCall) {
+                this.endCall();
+            }
+
+            // Try to notify other participants if connected
+            if (this.connection && this.isRoomOwner) {
+                try {
+                    this.connection.send(JSON.stringify({ type: 'owner-left' }));
+                } catch (e) {
+                    // Ignore connection errors during cleanup
+                }
+            }
+
+            // Clear all data
+            this.participants.clear();
+            this.cleanupConnections();
+
+            // Reset URL and state
+            window.history.pushState({}, '', '/');
+            this.isRoomOwner = false;
+            this.hasPartner = false;
+            this.encryptionKey = null;
+
+            // Reset UI
+            this.chatSection.classList.add('hidden');
+            this.joinSection.classList.remove('hidden');
+            this.joinSection.style.display = 'flex';
+            this.messagesContainer.innerHTML = '';
+            this.messageInput.value = '';
+            this.roomIdInput.value = '';
+            this.displayNameInput.value = '';
+            this.updateConnectionStatus('disconnected');
+
+            // Show success notification
+            this.showNotification({
+                title: 'Room Deleted',
+                message: 'The room has been permanently deleted.',
+                type: 'success'
+            });
+
+            // Reinitialize elements and icons
+            this.initializeElements();
+            lucide.createIcons();
+        };
     }
 
     cleanupConnections() {
@@ -689,6 +963,125 @@ class PrivateChatroom {
         this.screenCall = null;
         this.isInCall = false;
         this.isScreenSharing = false;
+    }
+
+    updateParticipantsList() {
+        const participantsList = document.getElementById('participants-list');
+        const participantsContainer = document.querySelector('.participants-container');
+        participantsList.innerHTML = '';
+        
+        // Add yourself first
+        const selfParticipant = document.createElement('div');
+        selfParticipant.className = 'participant';
+        selfParticipant.innerHTML = `
+            <span class="status"></span>
+            <span>${this.displayName} (You)</span>
+        `;
+        participantsList.appendChild(selfParticipant);
+
+        // Add toggle button if it doesn't exist
+        let toggleButton = participantsContainer.querySelector('.toggle-participants');
+        if (!toggleButton) {
+            toggleButton = document.createElement('button');
+            toggleButton.className = 'toggle-participants';
+            toggleButton.innerHTML = 'Show All';
+            participantsContainer.appendChild(toggleButton);
+            
+            toggleButton.addEventListener('click', () => {
+                const isExpanded = participantsList.classList.toggle('expanded');
+                toggleButton.innerHTML = isExpanded ? 'Hide' : 'Show All';
+            });
+        }
+
+        // Add other participants
+        this.participants.forEach(name => {
+            const participantElement = document.createElement('div');
+            participantElement.className = 'participant';
+            participantElement.innerHTML = `
+                <span class="status"></span>
+                <span>${name}</span>
+            `;
+            participantsList.appendChild(participantElement);
+        });
+
+        // Check if we need the toggle button
+        const participantsListRect = participantsList.getBoundingClientRect();
+        const lastParticipant = participantsList.lastElementChild;
+        const showToggle = lastParticipant && 
+            (lastParticipant.offsetLeft + lastParticipant.offsetWidth) > 
+            (participantsListRect.left + participantsListRect.width);
+
+        toggleButton.classList.toggle('visible', showToggle);
+        
+        // If we hide the toggle, ensure the list is not expanded
+        if (!showToggle && participantsList.classList.contains('expanded')) {
+            participantsList.classList.remove('expanded');
+            toggleButton.innerHTML = 'Show All';
+        }
+    }
+
+    displaySystemMessage(message) {
+        const messageElement = document.createElement('div');
+        messageElement.className = 'system-message';
+        messageElement.textContent = message;
+        this.messagesContainer.appendChild(messageElement);
+        this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
+
+        // Remove system message after 5 minutes
+        setTimeout(() => {
+            messageElement.style.opacity = '0';
+            setTimeout(() => {
+                if (messageElement.parentNode === this.messagesContainer) {
+                    this.messagesContainer.removeChild(messageElement);
+                }
+            }, 200);
+        }, 5 * 60 * 1000);
+    }
+
+    showNotification({ title, message, type = 'info', duration = 5000 }) {
+        const notification = document.createElement('div');
+        notification.className = `notification ${type}`;
+        
+        notification.innerHTML = `
+            <i data-lucide="${type === 'error' ? 'alert-circle' : type === 'success' ? 'check-circle' : 'info'}" class="notification-icon"></i>
+            <div class="notification-content">
+                <div class="notification-title">${title}</div>
+                <div class="notification-message">${message}</div>
+            </div>
+            <button class="notification-close">
+                <i data-lucide="x" class="icon"></i>
+            </button>
+        `;
+        
+        this.notificationContainer.appendChild(notification);
+        lucide.createIcons();
+        
+        const closeBtn = notification.querySelector('.notification-close');
+        closeBtn.onclick = () => {
+            notification.style.animation = 'slideOut 0.3s ease forwards';
+            setTimeout(() => notification.remove(), 300);
+        };
+        
+        if (duration) {
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.style.animation = 'slideOut 0.3s ease forwards';
+                    setTimeout(() => notification.remove(), 300);
+                }
+            }, duration);
+        }
+        
+        return notification;
+    }
+
+    generateAndSetRoomId() {
+        const roomId = this.generateRoomId();
+        this.roomIdInput.value = roomId;
+        this.showNotification({
+            title: 'Room ID Generated',
+            message: 'A new room ID has been generated. Click Join to connect.',
+            type: 'info'
+        });
     }
 }
 
